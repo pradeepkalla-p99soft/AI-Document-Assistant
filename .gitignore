@@ -35,3 +35,7 @@ build/
 .env
 .env.local
 *.log
+
+### Uploads / Stored Documents ###
+uploads/
+

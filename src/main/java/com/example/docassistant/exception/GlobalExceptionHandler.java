@@ -59,6 +59,56 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).headers(headers).body(problemDetail);
     }
 
+    @ExceptionHandler(InvalidFileException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidFileException(InvalidFileException ex) {
+        log.warn("Invalid file upload attempt: {}", ex.getMessage());
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setTitle("Invalid File Upload");
+        problemDetail.setType(URI.create("urn:problem-type:invalid-file"));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleDocumentNotFoundException(DocumentNotFoundException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, ex.getMessage());
+        problemDetail.setTitle("Document Not Found");
+        problemDetail.setType(URI.create("urn:problem-type:document-not-found"));
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request) {
+        log.warn("Upload file size exceeded threshold: {}", ex.getMessage());
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYLOAD_TOO_LARGE, "Uploaded file exceeds the maximum permitted upload size");
+        problemDetail.setTitle("Payload Too Large");
+        problemDetail.setType(URI.create("urn:problem-type:payload-too-large"));
+
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).headers(headers).body(problemDetail);
+    }
+
+    @ExceptionHandler(StorageException.class)
+    public ResponseEntity<ProblemDetail> handleStorageException(StorageException ex) {
+        log.error("Document storage failure: {}", ex.getMessage(), ex);
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR, "A storage error occurred while processing the document file");
+        problemDetail.setTitle("Storage Error");
+        problemDetail.setType(URI.create("urn:problem-type:storage-error"));
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problemDetail);
+    }
+
     @ExceptionHandler(AiProviderException.class)
     public ResponseEntity<ProblemDetail> handleAiProviderException(AiProviderException ex) {
         log.error("AI provider failure encountered: {}", ex.getMessage());

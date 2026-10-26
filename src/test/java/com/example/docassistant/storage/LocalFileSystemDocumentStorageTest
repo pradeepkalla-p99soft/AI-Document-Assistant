@@ -1,0 +1,93 @@
+package com.example.docassistant.storage;
+
+import com.example.docassistant.exception.StorageException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.core.io.Resource;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class LocalFileSystemDocumentStorageTest {
+
+    @TempDir
+    Path tempDir;
+
+    private LocalFileSystemDocumentStorage storage;
+
+    @BeforeEach
+    void setUp() {
+        storage = new LocalFileSystemDocumentStorage(tempDir.toString());
+    }
+
+    @Test
+    @DisplayName("store and load file successfully with safe key")
+    void storeAndLoad_success() throws IOException {
+        String key = "test-doc-123.pdf";
+        byte[] content = "%PDF-1.4 sample content".getBytes(StandardCharsets.UTF_8);
+
+        long storedBytes = storage.store(key, new ByteArrayInputStream(content));
+        assertThat(storedBytes).isEqualTo(content.length);
+
+        Resource resource = storage.loadAsResource(key);
+        assertThat(resource.exists()).isTrue();
+        assertThat(resource.contentLength()).isEqualTo(content.length);
+    }
+
+    @Test
+    @DisplayName("delete removes stored file")
+    void delete_removesFile() {
+        String key = "delete-target.pdf";
+        byte[] content = "%PDF-1.4 content".getBytes(StandardCharsets.UTF_8);
+        storage.store(key, new ByteArrayInputStream(content));
+
+        boolean deleted = storage.delete(key);
+        assertThat(deleted).isTrue();
+
+        assertThatThrownBy(() -> storage.loadAsResource(key))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("not found or unreadable");
+    }
+
+    @Test
+    @DisplayName("reject path traversal attacks in storage key")
+    void store_pathTraversalAttempt_rejected() {
+        String maliciousKey = "../evil.pdf";
+        byte[] content = "%PDF-1.4 evil".getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> storage.store(maliciousKey, new ByteArrayInputStream(content)))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("Invalid storage key format");
+    }
+
+    @Test
+    @DisplayName("reject storage key containing directory separators")
+    void store_slashInKey_rejected() {
+        String maliciousKey = "sub/folder/doc.pdf";
+        byte[] content = "%PDF-1.4 test".getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> storage.store(maliciousKey, new ByteArrayInputStream(content)))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("Invalid storage key format");
+    }
+
+    @Test
+    @DisplayName("store throws StorageException if duplicate key cannot be overwritten")
+    void store_duplicateKey_throwsException() {
+        String key = "unique-key.pdf";
+        byte[] content = "%PDF-1.4 test".getBytes(StandardCharsets.UTF_8);
+
+        storage.store(key, new ByteArrayInputStream(content));
+
+        assertThatThrownBy(() -> storage.store(key, new ByteArrayInputStream(content)))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("Failed to store document file with key");
+    }
+}
