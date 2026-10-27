@@ -1,7 +1,11 @@
 package com.example.docassistant.controller;
 
+import com.example.docassistant.dto.AskQuestionRequest;
+import com.example.docassistant.dto.AskQuestionResponse;
 import com.example.docassistant.dto.DocumentResponse;
 import com.example.docassistant.service.DocumentService;
+import com.example.docassistant.service.rag.QuestionAnsweringService;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -12,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,9 +29,19 @@ import java.util.UUID;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final QuestionAnsweringService questionAnsweringService;
 
-    public DocumentController(DocumentService documentService) {
+    public DocumentController(DocumentService documentService, QuestionAnsweringService questionAnsweringService) {
         this.documentService = documentService;
+        this.questionAnsweringService = questionAnsweringService;
+    }
+
+    @PostMapping("/{documentId}/ask")
+    public ResponseEntity<AskQuestionResponse> askQuestion(
+            @PathVariable("documentId") UUID documentId,
+            @Valid @RequestBody AskQuestionRequest request) {
+        AskQuestionResponse response = questionAnsweringService.askQuestion(documentId, request);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

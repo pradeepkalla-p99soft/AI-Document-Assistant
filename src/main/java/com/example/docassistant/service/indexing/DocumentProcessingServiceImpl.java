@@ -61,6 +61,7 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
             //    (Pre-cleanup is skipped on first run; cleanup only runs in error paths to ensure idempotency)
             log.info("Indexing {} chunks in vector store for document ID: {}", chunks.size(), record.getId());
             vectorStore.add(chunks);
+            persistVectorStoreIfSupported();
 
             // 5. Transition to READY upon successful vector indexing
             record.updateStatus(DocumentStatus.READY, null);
@@ -114,5 +115,21 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
             return "VECTOR_STORE_ERROR: Vector dimensionality or storage operation failed.";
         }
         return "INDEXING_FAILED: Internal error occurred during document indexing.";
+    }
+
+    private void persistVectorStoreIfSupported() {
+        if (vectorStore instanceof org.springframework.ai.vectorstore.SimpleVectorStore simpleStore) {
+            try {
+                java.io.File file = new java.io.File("uploads/vector_store.json");
+                java.io.File parent = file.getParentFile();
+                if (parent != null && !parent.exists()) {
+                    parent.mkdirs();
+                }
+                simpleStore.save(file);
+                log.info("Persisted vector store to: {}", file.getAbsolutePath());
+            } catch (Exception e) {
+                log.warn("Could not persist vector store to file: {}", e.getMessage());
+            }
+        }
     }
 }

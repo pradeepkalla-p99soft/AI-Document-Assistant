@@ -37,6 +37,9 @@ class DocumentControllerTest {
     @MockitoBean
     private DocumentService documentService;
 
+    @MockitoBean
+    private com.example.docassistant.service.rag.QuestionAnsweringService questionAnsweringService;
+
     @Test
     @DisplayName("POST /api/documents returns 201 with DocumentResponse on successful upload")
     void uploadDocument_success() throws Exception {
@@ -147,5 +150,85 @@ class DocumentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(docId.toString()))
                 .andExpect(jsonPath("$.content[0].filename").value("sample.pdf"));
+    }
+
+    @Test
+    @DisplayName("POST /api/documents/{documentId}/ask returns 200 with AskQuestionResponse on success")
+    void askQuestion_success() throws Exception {
+        UUID docId = UUID.randomUUID();
+        com.example.docassistant.dto.AskQuestionResponse response = new com.example.docassistant.dto.AskQuestionResponse(
+                docId,
+                "Spring Boot uses dependency injection.",
+                List.of(new com.example.docassistant.dto.SourceReference(docId, "doc.pdf", 1, "DI excerpt")),
+                true
+        );
+
+        given(questionAnsweringService.askQuestion(eq(docId), any(com.example.docassistant.dto.AskQuestionRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/{documentId}/ask", docId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"What does this say about DI?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documentId").value(docId.toString()))
+                .andExpect(jsonPath("$.answer").value("Spring Boot uses dependency injection."))
+                .andExpect(jsonPath("$.contextSupplied").value(true))
+                .andExpect(jsonPath("$.sources[0].pageNumber").value(1))
+                .andExpect(jsonPath("$.sources[0].excerpt").value("DI excerpt"));
+    }
+
+    @Test
+    @DisplayName("POST /api/documents/{documentId}/ask rejects blank question with 400")
+    void askQuestion_blankQuestion_returnsBadRequest() throws Exception {
+        UUID docId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/{documentId}/ask", docId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid Request Content"))
+                .andExpect(jsonPath("$.errors.question").value("Question must not be blank"));
+    }
+
+    @Test
+    @DisplayName("POST /api/documents/{documentId}/ask rejects oversized question (>2000 chars) with 400")
+    void askQuestion_oversizedQuestion_returnsBadRequest() throws Exception {
+        UUID docId = UUID.randomUUID();
+        String oversized = "a".repeat(2001);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/{documentId}/ask", docId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"" + oversized + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid Request Content"))
+                .andExpect(jsonPath("$.errors.question").value("Question must not exceed 2000 characters"));
+    }
+
+    @Test
+    @DisplayName("POST /api/documents/{documentId}/ask returns 404 when document does not exist")
+    void askQuestion_notFound_returns404() throws Exception {
+        UUID docId = UUID.randomUUID();
+        given(questionAnsweringService.askQuestion(eq(docId), any()))
+                .willThrow(new DocumentNotFoundException("Document not found with ID: " + docId));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/{documentId}/ask", docId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"Valid question here\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Document Not Found"));
+    }
+
+    @Test
+    @DisplayName("POST /api/documents/{documentId}/ask returns 409 Conflict when document is not ready")
+    void askQuestion_notReady_returns409() throws Exception {
+        UUID docId = UUID.randomUUID();
+        given(questionAnsweringService.askQuestion(eq(docId), any()))
+                .willThrow(new com.example.docassistant.exception.DocumentNotReadyException("Document is not ready"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/{documentId}/ask", docId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\": \"Valid question here\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Document Not Ready"));
     }
 }

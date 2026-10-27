@@ -17,6 +17,10 @@ spring:
     vectorstore:
       pgvector:
         initialize-schema: false
+    rag:
+      retrieval:
+        top-k: 4
+        similarity-threshold: 0.5
 
 storage:
   local:

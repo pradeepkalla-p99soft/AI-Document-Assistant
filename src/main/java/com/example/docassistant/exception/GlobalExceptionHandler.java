@@ -93,6 +93,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
     }
 
+    @ExceptionHandler(DocumentNotReadyException.class)
+    public ResponseEntity<ProblemDetail> handleDocumentNotReadyException(DocumentNotReadyException ex) {
+        log.warn("Document query attempted on non-ready document: {}", ex.getMessage());
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setTitle("Document Not Ready");
+        problemDetail.setType(URI.create("urn:problem-type:document-not-ready"));
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
     @Override
     protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
             org.springframework.web.multipart.MaxUploadSizeExceededException ex,

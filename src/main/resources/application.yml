@@ -32,7 +32,7 @@ spring:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
         options:
-          model: ${OLLAMA_CHAT_MODEL:llama3.1}
+          model: ${OLLAMA_CHAT_MODEL:llama3.2:3b}
       embedding:
         model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
       init:
@@ -43,6 +43,10 @@ spring:
         dimensions: ${PGVECTOR_DIMENSIONS:768}
         index-type: HNSW
         distance-type: COSINE_DISTANCE
+    rag:
+      retrieval:
+        top-k: ${RAG_TOP_K:4}
+        similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.0}
 
 storage:
   local:
