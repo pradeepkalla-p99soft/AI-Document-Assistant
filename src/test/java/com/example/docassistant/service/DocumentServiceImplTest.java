@@ -48,31 +48,45 @@ class DocumentServiceImplTest {
     @Mock
     private PdfFileValidator pdfFileValidator;
 
+    @Mock
+    private com.example.docassistant.service.indexing.DocumentProcessingService documentProcessingService;
+
     private DocumentServiceImpl documentService;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentServiceImpl(documentRepository, documentStorage, pdfFileValidator);
+        documentService = new DocumentServiceImpl(
+                documentRepository,
+                documentStorage,
+                pdfFileValidator,
+                documentProcessingService
+        );
     }
 
     @Test
-    @DisplayName("uploadDocument stores file and saves metadata record")
+    @DisplayName("uploadDocument stores file, saves metadata record, and executes processing pipeline")
     void uploadDocument_success() {
         byte[] content = "%PDF-1.4 test".getBytes(StandardCharsets.UTF_8);
         MockMultipartFile file = new MockMultipartFile("file", "my-doc.pdf", "application/pdf", content);
 
         given(documentRepository.save(any(DocumentRecord.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(documentProcessingService.processDocument(any(DocumentRecord.class))).willAnswer(invocation -> {
+            DocumentRecord rec = invocation.getArgument(0);
+            rec.updateStatus(DocumentStatus.READY, null);
+            return rec;
+        });
 
         DocumentResponse response = documentService.uploadDocument(file);
 
         assertThat(response).isNotNull();
         assertThat(response.filename()).isEqualTo("my-doc.pdf");
-        assertThat(response.status()).isEqualTo(DocumentStatus.UPLOADED);
+        assertThat(response.status()).isEqualTo(DocumentStatus.READY);
         assertThat(response.sizeBytes()).isEqualTo(content.length);
 
         verify(pdfFileValidator).validate(file);
         verify(documentStorage).store(anyString(), any(InputStream.class));
         verify(documentRepository).save(any(DocumentRecord.class));
+        verify(documentProcessingService).processDocument(any(DocumentRecord.class));
     }
 
     @Test

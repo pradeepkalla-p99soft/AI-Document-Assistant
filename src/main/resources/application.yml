@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ai_doc_db}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    password: ${DB_PASSWORD:dEEpu@28}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -33,14 +33,28 @@ spring:
       chat:
         options:
           model: ${OLLAMA_CHAT_MODEL:llama3.1}
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
       init:
         pull-model-strategy: never
+    vectorstore:
+      pgvector:
+        initialize-schema: ${PGVECTOR_INIT_SCHEMA:true}
+        dimensions: ${PGVECTOR_DIMENSIONS:768}
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
 
 storage:
   local:
     root: ${STORAGE_LOCAL_ROOT:uploads/documents}
+  vectorstore:
+    file: ${VECTOR_STORE_FILE:uploads/vector_store.json}
   upload:
     max-file-size: ${MAX_FILE_SIZE:10MB}
+  chunking:
+    target-chunk-tokens: ${CHUNK_TARGET_TOKENS:800}
+    min-chunk-chars: ${CHUNK_MIN_CHARS:200}
+    min-chunk-length-to-embed: ${CHUNK_MIN_LENGTH_TO_EMBED:5}
 
 management:
   endpoints:

@@ -71,6 +71,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 
+    @ExceptionHandler(PdfExtractionException.class)
+    public ResponseEntity<ProblemDetail> handlePdfExtractionException(PdfExtractionException ex) {
+        log.warn("PDF extraction failure: {}", ex.getMessage());
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problemDetail.setTitle("PDF Extraction Failed");
+        problemDetail.setType(URI.create("urn:problem-type:pdf-extraction-failed"));
+
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(problemDetail);
+    }
+
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleDocumentNotFoundException(DocumentNotFoundException ex) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(

@@ -5,6 +5,7 @@ import com.example.docassistant.dto.DocumentResponse;
 import com.example.docassistant.exception.DocumentNotFoundException;
 import com.example.docassistant.exception.StorageException;
 import com.example.docassistant.repository.DocumentRepository;
+import com.example.docassistant.service.indexing.DocumentProcessingService;
 import com.example.docassistant.storage.DocumentStorage;
 import com.example.docassistant.validation.PdfFileValidator;
 import org.slf4j.Logger;
@@ -29,18 +30,20 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentStorage documentStorage;
     private final PdfFileValidator pdfFileValidator;
+    private final DocumentProcessingService documentProcessingService;
 
     public DocumentServiceImpl(
             DocumentRepository documentRepository,
             DocumentStorage documentStorage,
-            PdfFileValidator pdfFileValidator) {
+            PdfFileValidator pdfFileValidator,
+            DocumentProcessingService documentProcessingService) {
         this.documentRepository = documentRepository;
         this.documentStorage = documentStorage;
         this.pdfFileValidator = pdfFileValidator;
+        this.documentProcessingService = documentProcessingService;
     }
 
     @Override
-    @Transactional
     public DocumentResponse uploadDocument(MultipartFile file) {
         // 1. Validate incoming file
         pdfFileValidator.validate(file);
@@ -62,7 +65,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw new StorageException("Failed to read upload input stream for: " + sanitizedFilename, e);
         }
 
-        // 5. Persist metadata in database with compensating cleanup on failure
+        // 5. Persist initial metadata in database with compensating cleanup on storage/db failure
         DocumentRecord record = DocumentRecord.createUploaded(
                 sanitizedFilename,
                 storageKey,
@@ -70,13 +73,13 @@ public class DocumentServiceImpl implements DocumentService {
                 file.getSize()
         );
 
+        DocumentRecord savedRecord;
         try {
-            DocumentRecord savedRecord = documentRepository.save(record);
+            savedRecord = documentRepository.save(record);
             log.info("Document successfully uploaded and saved with ID: {}, storageKey: {}",
                     savedRecord.getId(), storageKey);
-            return DocumentResponse.from(savedRecord);
         } catch (Exception ex) {
-            // Compensating transaction: remove physical file if database persistence fails
+            // Compensating transaction: remove physical file if initial database persistence fails
             log.error("Database save failed for document {}. Performing compensating file deletion.", storageKey, ex);
             try {
                 documentStorage.delete(storageKey);
@@ -85,6 +88,10 @@ public class DocumentServiceImpl implements DocumentService {
             }
             throw ex;
         }
+
+        // 6. Execute document ingestion pipeline (extraction -> chunking -> vector indexing)
+        DocumentRecord processedRecord = documentProcessingService.processDocument(savedRecord);
+        return DocumentResponse.from(processedRecord);
     }
 
     @Override
