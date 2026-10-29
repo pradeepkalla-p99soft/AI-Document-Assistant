@@ -25,5 +25,13 @@ spring:
 storage:
   local:
     root: target/test-uploads
+  assets:
+    root: target/test-assets
   upload:
     max-file-size: 10MB
+
+ai:
+  vision:
+    enabled: false
+ocr:
+  enabled: false

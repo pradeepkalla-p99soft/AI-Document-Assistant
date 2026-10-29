@@ -44,6 +44,12 @@ class DocumentProcessingServiceImplTest {
     @Mock
     private VectorStore vectorStore;
 
+    @Mock
+    private com.example.docassistant.repository.VisualAssetRepository visualAssetRepository;
+
+    @Mock
+    private com.example.docassistant.storage.VisualAssetStorage visualAssetStorage;
+
     private DocumentProcessingServiceImpl processingService;
 
     @BeforeEach
@@ -52,7 +58,9 @@ class DocumentProcessingServiceImplTest {
                 documentRepository,
                 contentExtractor,
                 documentChunker,
-                vectorStore
+                vectorStore,
+                visualAssetRepository,
+                visualAssetStorage
         );
     }
 

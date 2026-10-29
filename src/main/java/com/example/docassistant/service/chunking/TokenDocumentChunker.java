@@ -24,6 +24,9 @@ public class TokenDocumentChunker implements DocumentChunker {
     public static final String METADATA_FILENAME = "filename";
     public static final String METADATA_PAGE_NUMBER = "pageNumber";
     public static final String METADATA_CHUNK_INDEX = "chunkIndex";
+    public static final String METADATA_SOURCE_TYPE = "sourceType";
+    public static final String METADATA_ASSET_ID = "visualAssetId";
+    public static final String METADATA_CAPTION = "caption";
 
     private final TokenTextSplitter tokenTextSplitter;
 
@@ -50,10 +53,8 @@ public class TokenDocumentChunker implements DocumentChunker {
                 continue;
             }
 
-            // Normalize page number from PagePdfDocumentReader metadata
             int pageNumber = extractPageNumber(pageDoc.getMetadata());
 
-            // Split the page document using token text splitter
             List<Document> pageChunks = tokenTextSplitter.split(List.of(pageDoc));
 
             for (Document chunk : pageChunks) {
@@ -62,14 +63,15 @@ public class TokenDocumentChunker implements DocumentChunker {
                     continue;
                 }
 
-                // Preserve original metadata and enrich with document-level traceability
                 Map<String, Object> enrichedMetadata = new HashMap<>(chunk.getMetadata());
                 enrichedMetadata.put(METADATA_DOCUMENT_ID, documentId.toString());
                 enrichedMetadata.put(METADATA_FILENAME, filename);
                 enrichedMetadata.put(METADATA_PAGE_NUMBER, pageNumber);
                 enrichedMetadata.put(METADATA_CHUNK_INDEX, globalChunkIndex);
+                if (!enrichedMetadata.containsKey(METADATA_SOURCE_TYPE)) {
+                    enrichedMetadata.put(METADATA_SOURCE_TYPE, "TEXT");
+                }
 
-                // Deterministic chunk ID: documentId_chunkIndex
                 String chunkId = String.format("%s_%d", documentId, globalChunkIndex);
 
                 Document finalChunk = new Document(chunkId, chunkText, enrichedMetadata);
@@ -87,8 +89,10 @@ public class TokenDocumentChunker implements DocumentChunker {
             return 1;
         }
 
-        // PagePdfDocumentReader typically provides PagePdfDocumentReader.METADATA_START_PAGE_NUMBER ("page_number")
-        Object pageNumObj = metadata.get(PagePdfDocumentReader.METADATA_START_PAGE_NUMBER);
+        Object pageNumObj = metadata.get(METADATA_PAGE_NUMBER);
+        if (pageNumObj == null) {
+            pageNumObj = metadata.get(PagePdfDocumentReader.METADATA_START_PAGE_NUMBER);
+        }
         if (pageNumObj == null) {
             pageNumObj = metadata.get("page_number");
         }

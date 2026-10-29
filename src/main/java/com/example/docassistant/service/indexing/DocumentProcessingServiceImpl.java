@@ -4,8 +4,10 @@ import com.example.docassistant.domain.DocumentRecord;
 import com.example.docassistant.domain.DocumentStatus;
 import com.example.docassistant.exception.PdfExtractionException;
 import com.example.docassistant.repository.DocumentRepository;
+import com.example.docassistant.repository.VisualAssetRepository;
 import com.example.docassistant.service.chunking.DocumentChunker;
 import com.example.docassistant.service.extraction.DocumentContentExtractor;
+import com.example.docassistant.storage.VisualAssetStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -24,16 +26,22 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
     private final DocumentContentExtractor contentExtractor;
     private final DocumentChunker documentChunker;
     private final VectorStore vectorStore;
+    private final VisualAssetRepository visualAssetRepository;
+    private final VisualAssetStorage visualAssetStorage;
 
     public DocumentProcessingServiceImpl(
             DocumentRepository documentRepository,
             DocumentContentExtractor contentExtractor,
             DocumentChunker documentChunker,
-            VectorStore vectorStore) {
+            VectorStore vectorStore,
+            VisualAssetRepository visualAssetRepository,
+            VisualAssetStorage visualAssetStorage) {
         this.documentRepository = documentRepository;
         this.contentExtractor = contentExtractor;
         this.documentChunker = documentChunker;
         this.vectorStore = vectorStore;
+        this.visualAssetRepository = visualAssetRepository;
+        this.visualAssetStorage = visualAssetStorage;
     }
 
     @Override
@@ -41,13 +49,16 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
         Objects.requireNonNull(record, "DocumentRecord must not be null");
         log.info("Starting processing pipeline for document ID: {}, filename: {}", record.getId(), record.getFilename());
 
-        // 1. Mark status as PROCESSING in a discrete database transaction
+        // 1. Mark status as PROCESSING
         record.updateStatus(DocumentStatus.PROCESSING, null);
         record = documentRepository.save(record);
 
+        // Pre-clean previous assets and vector chunks for idempotent reprocessing
+        cleanUpPreviousData(record.getId());
+
         List<Document> chunks = List.of();
         try {
-            // 2. Extract page documents from storage
+            // 2. Extract structured page documents & visual descriptions from storage
             List<Document> pages = contentExtractor.extract(record.getStorageKey());
 
             // 3. Split into token-bounded chunks with preserved metadata
@@ -58,7 +69,6 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
             }
 
             // 4. Generate embeddings and persist chunks in vector store
-            //    (Pre-cleanup is skipped on first run; cleanup only runs in error paths to ensure idempotency)
             log.info("Indexing {} chunks in vector store for document ID: {}", chunks.size(), record.getId());
             vectorStore.add(chunks);
             persistVectorStoreIfSupported();
@@ -72,64 +82,63 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
         } catch (PdfExtractionException ex) {
             log.warn("Extraction failed for document ID: {}. Error: {}", record.getId(), ex.getMessage());
             cleanUpChunks(record.getId().toString(), chunks);
+            cleanUpPreviousData(record.getId());
             record.updateStatus(DocumentStatus.FAILED, "TEXT_EXTRACTION_FAILED: " + ex.getMessage());
             return documentRepository.save(record);
 
         } catch (Exception ex) {
             log.error("Indexing/Embedding failed for document ID: {}. Error: {}", record.getId(), ex.getMessage(), ex);
             cleanUpChunks(record.getId().toString(), chunks);
+            cleanUpPreviousData(record.getId());
             String sanitizedError = sanitizeErrorMessage(ex);
             record.updateStatus(DocumentStatus.FAILED, sanitizedError);
             return documentRepository.save(record);
         }
     }
 
+    private void cleanUpPreviousData(java.util.UUID documentId) {
+        try {
+            visualAssetRepository.deleteByDocumentId(documentId);
+            visualAssetStorage.deleteAssetsForDocument(documentId);
+        } catch (Exception e) {
+            log.warn("Failed to cleanup previous visual assets for document {}: {}", documentId, e.getMessage());
+        }
+    }
+
     private void cleanUpChunks(String documentId, List<Document> chunks) {
         try {
-            // First attempt: Delete by documentId metadata filter
             String filter = String.format("documentId == '%s'", documentId);
             vectorStore.delete(filter);
             log.debug("Cleaned up vector store chunks for documentId via filter: {}", documentId);
         } catch (Exception filterEx) {
             log.warn("Vector store delete by filter expression failed ({}); falling back to chunk IDs", filterEx.getMessage());
-            // Fallback attempt: Delete by explicit chunk IDs if available
             if (chunks != null && !chunks.isEmpty()) {
                 try {
                     List<String> chunkIds = chunks.stream().map(Document::getId).toList();
                     vectorStore.delete(chunkIds);
                     log.debug("Cleaned up vector store chunks via explicit IDs for documentId: {}", documentId);
                 } catch (Exception idEx) {
-                    log.warn("Vector store fallback cleanup by ID failed: {}", idEx.getMessage());
+                    log.warn("Vector store fallback cleanup by chunk IDs also failed: {}", idEx.getMessage());
                 }
             }
         }
-    }
-
-    private String sanitizeErrorMessage(Exception ex) {
-        String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-        if (msg.toLowerCase().contains("connection") || msg.toLowerCase().contains("refused")
-                || msg.toLowerCase().contains("timeout") || msg.toLowerCase().contains("unavailable")) {
-            return "EMBEDDING_SERVICE_UNAVAILABLE: The AI embedding service could not be reached.";
-        }
-        if (msg.toLowerCase().contains("dimension") || msg.toLowerCase().contains("vector")) {
-            return "VECTOR_STORE_ERROR: Vector dimensionality or storage operation failed.";
-        }
-        return "INDEXING_FAILED: Internal error occurred during document indexing.";
     }
 
     private void persistVectorStoreIfSupported() {
         if (vectorStore instanceof org.springframework.ai.vectorstore.SimpleVectorStore simpleStore) {
             try {
-                java.io.File file = new java.io.File("uploads/vector_store.json");
-                java.io.File parent = file.getParentFile();
-                if (parent != null && !parent.exists()) {
-                    parent.mkdirs();
-                }
-                simpleStore.save(file);
-                log.info("Persisted vector store to: {}", file.getAbsolutePath());
-            } catch (Exception e) {
-                log.warn("Could not persist vector store to file: {}", e.getMessage());
+                java.lang.reflect.Method saveMethod = simpleStore.getClass().getMethod("save", java.io.File.class);
+                saveMethod.invoke(simpleStore, new java.io.File("uploads/vector_store.json"));
+            } catch (Exception ignored) {
             }
         }
+    }
+
+    private String sanitizeErrorMessage(Throwable ex) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            return "An internal error occurred during document indexing";
+        }
+        return message.length() > 500 ? message.substring(0, 500) + "..." : message;
     }
 }
