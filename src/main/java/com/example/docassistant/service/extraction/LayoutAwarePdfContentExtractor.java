@@ -53,8 +53,15 @@ public class LayoutAwarePdfContentExtractor implements DocumentContentExtractor 
 
     @Override
     public List<Document> extract(String storageKey) {
+        return extract(storageKey, extractDocumentIdFromKey(storageKey));
+    }
+
+    @Override
+    public List<Document> extract(String storageKey, UUID documentId) {
         Resource pdfResource = documentStorage.loadAsResource(storageKey);
-        UUID documentId = extractDocumentIdFromKey(storageKey);
+        if (documentId == null) {
+            documentId = extractDocumentIdFromKey(storageKey);
+        }
 
         StructuredDocumentResult result;
         try (InputStream is = pdfResource.getInputStream()) {

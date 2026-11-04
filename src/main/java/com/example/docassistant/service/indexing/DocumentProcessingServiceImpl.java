@@ -59,7 +59,7 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
         List<Document> chunks = List.of();
         try {
             // 2. Extract structured page documents & visual descriptions from storage
-            List<Document> pages = contentExtractor.extract(record.getStorageKey());
+            List<Document> pages = contentExtractor.extract(record.getStorageKey(), record.getId());
 
             // 3. Split into token-bounded chunks with preserved metadata
             chunks = documentChunker.chunk(pages, record.getId(), record.getFilename());
@@ -68,10 +68,9 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
                 throw new PdfExtractionException("No text chunks generated for document");
             }
 
-            // 4. Generate embeddings and persist chunks in vector store
+            // 4. Generate embeddings and persist chunks in vector store (PgVectorStore persists automatically via JDBC)
             log.info("Indexing {} chunks in vector store for document ID: {}", chunks.size(), record.getId());
             vectorStore.add(chunks);
-            persistVectorStoreIfSupported();
 
             // 5. Transition to READY upon successful vector indexing
             record.updateStatus(DocumentStatus.READY, null);
@@ -120,16 +119,6 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
                 } catch (Exception idEx) {
                     log.warn("Vector store fallback cleanup by chunk IDs also failed: {}", idEx.getMessage());
                 }
-            }
-        }
-    }
-
-    private void persistVectorStoreIfSupported() {
-        if (vectorStore instanceof org.springframework.ai.vectorstore.SimpleVectorStore simpleStore) {
-            try {
-                java.lang.reflect.Method saveMethod = simpleStore.getClass().getMethod("save", java.io.File.class);
-                saveMethod.invoke(simpleStore, new java.io.File("uploads/vector_store.json"));
-            } catch (Exception ignored) {
             }
         }
     }

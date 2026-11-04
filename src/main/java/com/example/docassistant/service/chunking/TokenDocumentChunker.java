@@ -72,7 +72,7 @@ public class TokenDocumentChunker implements DocumentChunker {
                     enrichedMetadata.put(METADATA_SOURCE_TYPE, "TEXT");
                 }
 
-                String chunkId = String.format("%s_%d", documentId, globalChunkIndex);
+                String chunkId = UUID.randomUUID().toString();
 
                 Document finalChunk = new Document(chunkId, chunkText, enrichedMetadata);
                 chunkedDocuments.add(finalChunk);

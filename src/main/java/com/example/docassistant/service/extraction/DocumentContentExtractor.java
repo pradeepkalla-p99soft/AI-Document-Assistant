@@ -17,4 +17,11 @@ public interface DocumentContentExtractor {
      * @throws com.example.docassistant.exception.PdfExtractionException if unreadable or no usable text is found
      */
     List<Document> extract(String storageKey);
+
+    /**
+     * Extracts text content and page-level metadata scoped to the given document entity ID.
+     */
+    default List<Document> extract(String storageKey, java.util.UUID documentId) {
+        return extract(storageKey);
+    }
 }
