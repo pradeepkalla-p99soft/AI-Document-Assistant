@@ -45,6 +45,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public DocumentResponse uploadDocument(MultipartFile file) {
+        return uploadDocument(file, null);
+    }
+
+    @Override
+    public DocumentResponse uploadDocument(MultipartFile file, UUID ownerId) {
         // 1. Validate incoming file
         pdfFileValidator.validate(file);
 
@@ -70,7 +75,8 @@ public class DocumentServiceImpl implements DocumentService {
                 sanitizedFilename,
                 storageKey,
                 contentType,
-                file.getSize()
+                file.getSize(),
+                ownerId
         );
 
         DocumentRecord savedRecord;
@@ -97,16 +103,38 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocument(UUID id) {
+        return getDocument(id, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentResponse getDocument(UUID id, UUID ownerId) {
         Objects.requireNonNull(id, "Document ID must not be null");
-        DocumentRecord record = documentRepository.findById(id)
-                .orElseThrow(() -> new DocumentNotFoundException("Document not found with ID: " + id));
+        DocumentRecord record;
+        if (ownerId != null) {
+            record = documentRepository.findByIdAndOwnerId(id, ownerId)
+                    .orElseThrow(() -> new DocumentNotFoundException("Document not found with ID: " + id));
+        } else {
+            record = documentRepository.findById(id)
+                    .orElseThrow(() -> new DocumentNotFoundException("Document not found with ID: " + id));
+        }
         return DocumentResponse.from(record);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<DocumentResponse> listDocuments(Pageable pageable) {
+        return listDocuments(null, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DocumentResponse> listDocuments(UUID ownerId, Pageable pageable) {
         Objects.requireNonNull(pageable, "Pageable must not be null");
+        if (ownerId != null) {
+            return documentRepository.findByOwnerId(ownerId, pageable)
+                    .map(DocumentResponse::from);
+        }
         return documentRepository.findAll(pageable)
                 .map(DocumentResponse::from);
     }

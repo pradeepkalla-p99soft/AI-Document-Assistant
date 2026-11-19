@@ -16,4 +16,8 @@ public interface DocumentRepository extends JpaRepository<DocumentRecord, UUID> 
     Optional<DocumentRecord> findByStorageKey(String storageKey);
 
     Page<DocumentRecord> findByStatus(DocumentStatus status, Pageable pageable);
+
+    Page<DocumentRecord> findByOwnerId(UUID ownerId, Pageable pageable);
+
+    Optional<DocumentRecord> findByIdAndOwnerId(UUID id, UUID ownerId);
 }

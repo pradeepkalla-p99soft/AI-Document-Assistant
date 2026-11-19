@@ -86,5 +86,10 @@ management:
     health:
       show-details: never
 
+security:
+  jwt:
+    secret: ${JWT_SECRET:YourSuperSecretKeyForJWTTokenSigningMustBe32BytesOrMore!!}
+    expiration-hours: ${JWT_EXPIRATION_HOURS:24}
+
 server:
   port: 8080

@@ -35,3 +35,8 @@ ai:
     enabled: false
 ocr:
   enabled: false
+
+security:
+  jwt:
+    secret: testSecretKeyForJWTTokenSigningMustBeAtLeast32BytesLong!!
+    expiration-hours: 1
