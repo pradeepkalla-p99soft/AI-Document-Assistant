@@ -38,6 +38,9 @@ public class DocumentRecord {
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
+    @Column(name = "owner_id")
+    private UUID ownerId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -50,17 +53,27 @@ public class DocumentRecord {
 
     public DocumentRecord(UUID id, String filename, String storageKey, String contentType,
                           long sizeBytes, DocumentStatus status, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+        this(id, filename, storageKey, contentType, sizeBytes, status, null, createdAt, updatedAt);
+    }
+
+    public DocumentRecord(UUID id, String filename, String storageKey, String contentType,
+                          long sizeBytes, DocumentStatus status, UUID ownerId, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.filename = Objects.requireNonNull(filename, "filename must not be null");
         this.storageKey = Objects.requireNonNull(storageKey, "storageKey must not be null");
         this.contentType = Objects.requireNonNull(contentType, "contentType must not be null");
         this.sizeBytes = sizeBytes;
         this.status = Objects.requireNonNull(status, "status must not be null");
+        this.ownerId = ownerId;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
     }
 
     public static DocumentRecord createUploaded(String filename, String storageKey, String contentType, long sizeBytes) {
+        return createUploaded(filename, storageKey, contentType, sizeBytes, null);
+    }
+
+    public static DocumentRecord createUploaded(String filename, String storageKey, String contentType, long sizeBytes, UUID ownerId) {
         OffsetDateTime now = OffsetDateTime.now();
         return new DocumentRecord(
                 UUID.randomUUID(),
@@ -69,6 +82,7 @@ public class DocumentRecord {
                 contentType,
                 sizeBytes,
                 DocumentStatus.UPLOADED,
+                ownerId,
                 now,
                 now
         );
@@ -96,6 +110,14 @@ public class DocumentRecord {
 
     public DocumentStatus getStatus() {
         return status;
+    }
+
+    public UUID getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(UUID ownerId) {
+        this.ownerId = ownerId;
     }
 
     public String getErrorMessage() {
